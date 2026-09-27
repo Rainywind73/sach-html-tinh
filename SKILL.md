@@ -6,10 +6,10 @@ description: >
   Dùng khi người dùng nói sách điện tử, HTML standalone, site tĩnh, mỗi chương
   một file, file://, sinh sách, hoặc đưa lược đồ Danh sách chương → Sinh HTML
   → Thư mục gốc / Bản xem trước. Không dùng cho SPA, Word, PDF, hay ứng dụng
-  có đăng nhập.
+  có đăng nhập. Bản 1.1: hợp đồng từng nút, mẫu trang, chỉ mục file://, kiểm.
 metadata:
   short-description: "Site tĩnh nhiều trang, một HTML mỗi chương, file:// và khung xem cùng byte"
-  version: "1.0"
+  version: "1.1"
   language: vi
 user-invocable: true
 ---
@@ -31,6 +31,15 @@ flowchart LR
 
 Một lần sinh ghi **hai cây giống hệt nhau**. Byte trong thư mục gốc là byte khung xem. Không vẽ lại sách bằng React.
 
+Khi đang sinh, đọc thêm, theo thứ tự cần:
+
+1. [references/hop-dong-nut.md](references/hop-dong-nut.md) — vào, ra, cấm của sáu nút.
+2. [references/mau-trang.md](references/mau-trang.md) — khung HTML và CSS. Không bịa chrome khác.
+3. [references/tim-kiem.md](references/tim-kiem.md) — chỉ mục nhúng, vì `file://` không `fetch`.
+4. [references/kiem-tra.md](references/kiem-tra.md) — cửa trước khi báo xong.
+
+Hỏi lược đồ thì chỉ đọc file này. Sinh sách thì đọc cả bốn.
+
 ## Khi nào chạy
 
 Chạy khi người dùng yêu cầu tạo hoặc sinh lại sách. Nếu họ chỉ nói «viết skill» hoặc «chờ lệnh», **chỉ** tạo hoặc sửa skill này, không sinh HTML.
@@ -44,19 +53,27 @@ Chạy khi người dùng yêu cầu tạo hoặc sinh lại sách. Nếu họ c
 
 Thiếu danh sách chương thì dừng và hỏi. Không bịa thân chương.
 
+## Bất biến
+
+Bốn điều này sai một cái là bản sinh hỏng, dù trang vẫn «nhìn được»:
+
+1. **Một chương, một file.** Tên `chuong-NN.html`, `NN` đệm hai số. Không SPA, không router băm.
+2. **Mọi liên kết tương đối, cùng thư mục.** Không `base href`, không href bắt đầu bằng `/`, không URL máy sinh.
+3. **Chỉ mục nằm trong từng HTML.** `window.SEARCH_INDEX` có trước `app.js`. `app.js` là script thường, không `type="module"`, không `fetch`.
+4. **Hai cây cùng byte** khi có khung xem. Hash file HTML, CSS, JS của thư mục gốc bằng bản `public/sach/`. Lệch là lỗi, không phải «gần đúng».
+
 ## Không làm
 
-- Không SPA, không một file chứa cả sách, không router băm thay cho file chương.
-- Không `fetch` lúc đọc. `file://` chặn nó.
-- Không `type="module"`. Không CDN. Không `base href`. Không đường dẫn bắt đầu bằng `/`.
-- Không service worker. Không phông mạng.
+- Không một file chứa cả sách.
+- Không CDN, không phông mạng, không service worker.
 - Không sửa một HTML tay rồi để bản kia cũ. Sửa nguồn rồi sinh lại cả hai cây.
 - Không đưa ô tìm của người đọc vào HTML kết quả tìm (chỉ chèn tiêu đề đã sinh).
 - Không đăng ký tài khoản, không `@/lib/db`, không migration.
+- Không nhét sách vào JSX của khung ứng dụng. Route `/` chỉ chuyển tới `/sach/index.html`.
 
 ## Cây thư mục gốc
 
-Giữ phẳng. Không lồng chương theo tập.
+Giữ phẳng. Tập sách là trường trong mục lục, không phải folder.
 
 ```
 <thu-muc-goc>/
@@ -67,96 +84,28 @@ Giữ phẳng. Không lồng chương theo tập.
   chuong-01.html … chuong-NN.html
   style.css
   app.js
-  search-index.json       bản cho máy chủ tĩnh; không được fetch trên file://
+  search-index.json       bản cho máy chủ tĩnh; trang không được fetch nó
   README-HOST.txt
 ```
 
-`chuong-NN` đệm hai số. `id` chương là 1..N. Tập sách chỉ là trường trong mục lục, không phải folder.
-
-## Nút 1 — Danh sách chương
-
-Nguồn duy nhất của chữ. Mỗi mục:
-
-| Trường | Bắt buộc | Ghi chú |
-|---|---|---|
-| `n` | có | 1..N, liên tục |
-| `title` | có | không chứa thẻ |
-| `summary` | có | một câu, hiện trên thẻ trang chủ |
-| `body` | có | HTML thân: `h2`, `p`, `ul`, `ol`, `table`. Không `script` |
-
-Trang đặc biệt không tính là chương: chủ, tổng quan, và trang khám phá nếu nguồn có lớp hoặc mốc. Chúng vẫn là file HTML riêng.
-
-## Nút 2 — Sinh HTML
-
-Một hàm trang. Mọi HTML dùng cùng chrome.
-
-Phần đầu, trước CSS paint:
-
-```html
-<script>try{if(localStorage.theme==='dark')document.documentElement.classList.add('dark')}catch(e){}</script>
-```
-
-Chrome: thanh đầu (nút mục lục, tên ngắn, ô tìm, nút nền), `#hits`, lưới `nav.toc` + `main`, chân trang.
-
-Mục lục là các `a href` tương đối. Chương đang mở có `class="on"`. Không menu dựng bằng JavaScript — JS chỉ bật/tắt `.nav-open` trên điện thoại.
-
-Cuối `body`, đúng thứ tự:
-
-```html
-<script>window.SEARCH_INDEX=…;</script>
-<script src="app.js" defer></script>
-```
-
-`SEARCH_INDEX` là mảng `{chapter, title, text, url}` nhúng **mọi** trang. `text` = câu tóm + thân đã cắt thẻ, cắt khoảng 1.500 ký tự. `url` tương đối (`chuong-03.html`).
-
-`app.js` là một IIFE:
-
-- Bỏ dấu NFD, chữ thường.
-- Debounce 80 ms. Dưới 2 ký tự thì giấu kết quả.
-- Điểm: 6 nếu khớp tiêu đề, 1 nếu khớp thân. Lấy 12 dòng.
-- Nền: gán class `dark` lên `html`, lưu `localStorage.theme`.
-- Không `fetch`. Không đọc `search-index.json` trên `file://`.
-
-`style.css` dùng biến: nền, mực, nhấn, thẻ, kẻ, mục lục. Tối đa hai họ chữ (serif thân, sans chrome). Lưới hai cột từ 900 px; dưới đó mục lục là lớp phủ. `@media print` giấu thanh đầu và mục lục. Không hex rải trong từng trang — token nằm trong CSS.
-
-Escape tiêu đề và câu tóm. Thân là HTML nguồn, không escape lần hai, nhưng nguồn không được có `<script>`.
-
-Ghi thêm `search-index.json` cùng mảng, cho người host bằng máy chủ tĩnh. Trang không được phụ thuộc file này.
-
 `README-HOST.txt` đúng ba ý: bấm đúp `index.html`; hoặc `python3 -m http.server` trong thư mục; không cần Node, không cần mạng để đọc.
 
-## Nút 3 và 4 — Thư mục gốc, mở index.html
+## Sinh, một lượt
 
-Ghi cây vào đường người dùng đã chỉ. `index.html` ở **gốc** thư mục đó, không nằm trong thư mục con bắt buộc.
+1. Kiểm danh sách: `n` từ 1 đến N liên tục, tiêu đề không thẻ, thân không `script`.
+2. Cắt thẻ, lấy câu tóm + tối đa 1.500 ký tự thân → mảng chỉ mục.
+3. Với mỗi trang, gọi một hàm trang: chrome + mục lục (chương hiện tại có `class="on"`) + thân + chỉ mục nhúng.
+4. Escape tiêu đề và câu tóm. Không escape thân lần hai.
+5. Ghi `style.css` và `app.js` một lần, không nhân CSS vào từng HTML.
+6. Ghi cây vào thư mục gốc. Nếu có khung xem, ghi **cùng** cây vào `public/sach/`.
+7. Chạy cửa ở `references/kiem-tra.md`.
 
-Kiểm trước khi báo xong:
-
-- Mở `index.html` bằng đường file: mục lục, một chương, tìm một từ trong tiêu đề đều chạy.
-- Mọi `href` và `src` tương đối. Không URL máy sinh.
-- Không request ra mạng (không thấy font, script, ảnh ngoài).
-
-## Nút 5 và 6 — Bản xem trước, khung xem
-
-Chỉ khi đang ở app builder và người dùng cần khung xem.
-
-1. Ghi **cùng** cây vào `public/sach/`.
-2. Route `/` không dựng lại sách. `beforeLoad` ném redirect tới `/sach/index.html`.
-3. Giữ cầu xem trước và auth provider của khung ứng dụng. Không nhét sách vào JSX.
-4. `startup.sh` vẫn `npm run dev` trên cổng xem trước. Không đổi cổng.
-
-Hai cây lệch nhau là lỗi. Sinh lại cả hai từ cùng danh sách, không vá một phía.
-
-## Sửa sau này
-
-- Đổi chữ chương: sửa danh sách, sinh lại cả hai cây và `SEARCH_INDEX`.
-- Đổi CSS hoặc `app.js`: sinh lại hoặc chép đè **cả** `style.css` / `app.js` ở hai cây. Không bump query nếu không có cache máy chủ; file:// không cần.
-- Thêm chương: file mới + mục lục mọi trang + chỉ mục. Không đổi lược đồ sáu nút.
+Đổi chữ, thêm chương, hoặc đổi CSS: sinh lại từ bước 1. Không vá một file.
 
 ## Xong việc khi
 
-- [ ] Một file HTML mỗi chương, tên `chuong-NN.html`
-- [ ] `index.html` mở trực tiếp được
-- [ ] `window.SEARCH_INDEX` có trên mọi trang
-- [ ] `app.js` không phải module, không `fetch`
-- [ ] Nếu có khung xem: `/` chỉ chuyển tới bản tĩnh, không phải bản React thứ hai
+- [ ] Một file HTML mỗi chương
+- [ ] `index.html` mở trực tiếp được, tìm một từ trong tiêu đề ra đúng chương
+- [ ] `window.SEARCH_INDEX` có trên mọi trang, `app.js` không `fetch`
+- [ ] Nếu có khung xem: `/` chỉ chuyển tới bản tĩnh, hash hai cây khớp
 - [ ] Không số bịa, không thân chương bịa khi nguồn chưa có
